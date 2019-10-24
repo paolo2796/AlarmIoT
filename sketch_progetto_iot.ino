@@ -14,7 +14,7 @@ DHT dht(DHTPIN, DHTTYPE); //// Initialize DHT sensor for normal 16mhz Arduino
 //Variables
 int chk;
 float hum;  //Stores humidity value
-float temp=25; //Stores temperature value
+float temp = 25; //Stores temperature value
 
 
 
@@ -22,17 +22,17 @@ float temp=25; //Stores temperature value
 
 
 /**
-* ACCENSIONE LED CON RFID 
-* Per maggiori info: www.progettiarduino.com
-* Importante, collegare il lettore RFID ai pin di Arduino uno come segue:
-* MOSI: Pin 11 / ICSP-4
-* MISO: Pin 12 / ICSP-1
-* SCK: Pin 13 / ISCP-3
-* SDA: Pin 10
-* RST: Pin 9
+  ACCENSIONE LED CON RFID
+  Per maggiori info: www.progettiarduino.com
+  Importante, collegare il lettore RFID ai pin di Arduino uno come segue:
+  MOSI: Pin 11 / ICSP-4
+  MISO: Pin 12 / ICSP-1
+  SCK: Pin 13 / ISCP-3
+  SDA: Pin 10
+  RST: Pin 9
 */
 
-    // FOR ARDUINO MEGA MOSI  MISO  SCK SS (slave)  SS (master) Level
+// FOR ARDUINO MEGA MOSI  MISO  SCK SS (slave)  SS (master) Level
 
 //Mega1280 or Mega2560  51     50   52  53  - 5V
 #include <SPI.h>
@@ -44,7 +44,7 @@ float temp=25; //Stores temperature value
 #define RST_PIN 9
 
 // Codice della chiave master.
-#define masnum0 199 
+#define masnum0 199
 #define masnum1 3
 #define masnum2 151
 #define masnum3 27
@@ -54,12 +54,12 @@ float temp=25; //Stores temperature value
 
 #define resetkey 6
 
-RFID rfid(SS_PIN, RST_PIN); 
+RFID rfid(SS_PIN, RST_PIN);
 
 
 boolean cardmas = 0; // Variabile chiave master
-int slave=0; // Contatore delle chiavi salvate
-    
+int slave = 0; // Contatore delle chiavi salvate
+
 int sernum0;
 int sernum1;
 int sernum2;
@@ -76,20 +76,49 @@ enum AlarmStatus {
 AlarmStatus statusAlarm = DISABLED;
 
 
-void initSensorProximity(){
-  
+#include <WiFiNINA.h>
+
+///////please enter your sensitive data in the Secret tab/arduino_secrets.h
+char ssid[] = "SuperFibra2 2.4GHz";        // your network SSID (name)
+char pass[] = "vigorhome";    // your network password (use for WPA, or use as key for WEP)
+int status = WL_IDLE_STATUS;     // the Wifi radio's status
+
+
+/* MQTT */
+
+#include <PubSubClient.h>
+
+#define ARDUINO_CLIENT_ID "arduino_uno_rev2"
+#define PUB_PROXIMITY "casa/database/registration_nfc"   // MTTQ topic for proximity [CM]
+#define CONNECTOR "mqtt"
+IPAddress server(192, 168, 0, 104);// MTTQ server IP address
+
+WiFiClient wifiClient;
+PubSubClient client(wifiClient);
+
+
+/* HTTP CLIENT */
+#include <Bridge.h>
+#include <HttpClient.h>
+
+
+
+void initSensorProximity() {
+
   pinMode(triggerPort, OUTPUT);
   pinMode(echoPort, INPUT);
-  
+
 }
 
-void initPins(){
-  
+void initPins() {
+
   pinMode(ledWhite, OUTPUT);
-  digitalWrite(ledWhite,HIGH);
+  digitalWrite(ledWhite, HIGH);
   pinMode(ledBlue, OUTPUT);
-  
+
 }
+
+
 
 
 /* END RFID  PROPERTY */
@@ -97,26 +126,44 @@ void initPins(){
 void setup() {
 
 
-initSensorProximity();
-initPins();
- 
+  //Initialize serial and wait for port to open:
+  Serial.begin(9600);
+  while (!Serial) {
+    ; // wait for serial port to connect. Needed for native USB port only
+  }
 
-Serial.begin(9600);
-//init temperature's sensor
- dht.begin();
-
-
+  initSensorProximity();
+  initPins();
+  initWifi();
+  //init temperature's sensor
+  dht.begin();
   //rfid init
- SPI.begin(); 
+  SPI.begin();
   rfid.init();
+
+  /*
+    Serial.println("MESSAGGIO DA INVIARE");
+    // MTTQ parameters
+    client.setServer(server, 1883);
+    client.connect(ARDUINO_CLIENT_ID, "paolo", "paoletto");
+    client.setCallback(callback);
+
+    client.publish(PUB_PROXIMITY, "A");
+
+    Serial.println("MESSAGGIO PUBBLICATO"); */
+
+
 }
- 
+
+
 void loop() {
 
-    //verifico lettura rfid
+  //printCurrentNet();
+
+  //verifico lettura rfid
   rfidRead();
 
-  if(statusAlarm == DISABLED)
+  if (statusAlarm == DISABLED)
     return;
 
   //read sensor's temperature
@@ -124,162 +171,300 @@ void loop() {
   checkDistanceProximity(temperature);
 
 
+
+
+
   //Aspetta 1 secondo
   delay(1000);
 }
 
 
-void rfidRead(){
-   slave = (EEPROM.read(0) == 255)?0:EEPROM.read(0);
+
+/* RFID */
+void rfidRead() {
+  slave = (EEPROM.read(0) == 255) ? 0 : EEPROM.read(0);
   // Rileva un tag...
   if (rfid.isCard()) {
-      // Legge il seriale...
-      if (rfid.readCardSerial()) {
-                sernum0 = rfid.serNum[0];
-                sernum1 = rfid.serNum[1];
-                sernum2 = rfid.serNum[2];
-                sernum3 = rfid.serNum[3];
-                sernum4 = rfid.serNum[4];
-                // Se il seriale letto corrisponde con il seriale Master
-                // attiva o disattiva la modalita Memorizzazione chiavi
-                // e in più visualizza l'elenco della chiavi salvate... 
-                if (sernum0 == masnum0 && sernum1 == masnum1 && sernum2 == masnum2 && sernum3 == masnum3 && sernum4 == masnum4) {
-                    if (cardmas==0) {
-                        Serial.println("CARD MASTER");
-                        Serial.println("MODALITA' ADMIN");
-                        cardmas = 1;
-                        Serial.println("Chiavi slave: ");
-                        Serial.println(slave);
-                  }  
-                  else { 
-                    cardmas = 0;
-                    Serial.println("USCITA MODALITA ADMIN");
-                    delay(3000);
-                  }
-               }//end if
-                
-                // Se invece il seriale letto corrisponde con uno dei tre gruppi 
-                // di chiavi memorizzate allora attiva o disattiva il Led
-          else if ((sernum0 == EEPROM.read(1) && sernum1 == EEPROM.read(2) && sernum2 == EEPROM.read(3) && sernum3 == EEPROM.read(4) && sernum4 == EEPROM.read(5))
-                   || (sernum0 == EEPROM.read(6) && sernum1 == EEPROM.read(7) && sernum2 == EEPROM.read(8) && sernum3 == EEPROM.read(9) && sernum4 == EEPROM.read(10))
-                   || (sernum0 == EEPROM.read(11) && sernum1 == EEPROM.read(12) && sernum2 == EEPROM.read(13) && sernum3 == EEPROM.read(14) && sernum4 == EEPROM.read(15))) {
-                              
-                   Serial.println("CHIAVE SLAVE VALIDA");
-
-                   checkStatusAlarm();
-                   delay(3000);
-
-           } 
-                // Se il seriale letto è diverso dal master e non è presente in memoria,
-                // e se è attiva la modalita Memorizzazione chiavi, salva il seriale in memoria
-                // come slave1, slave2 o slave3.
-           else if (cardmas == 1 && slave == 0) {
-              
-                    Serial.println("Chiave rilevata!");
-                    EEPROM.write(0, 1);
-                    EEPROM.write(1, sernum0);
-                    EEPROM.write(2, sernum1);
-                    EEPROM.write(3, sernum2);
-                    EEPROM.write(4, sernum3);
-                    EEPROM.write(5, sernum4);
-                    cardmas = 0;
-                    Serial.println("Slave 1 salvata!");
-                    delay(3000);
-                                        
-           }
-           else if (cardmas == 1 && slave == 1) {
-                         
-                   Serial.println("Chiave rilevata!");
-                   EEPROM.write(0, 2);
-                   EEPROM.write(6, sernum0);
-                   EEPROM.write(7, sernum1);
-                   EEPROM.write(8, sernum2);
-                   EEPROM.write(9, sernum3);
-                   EEPROM.write(10, sernum4);
-                   cardmas = 0;
-                   delay(1000);
-                   Serial.println("Slave 2 salvata!");
-                    delay(3000);
-            }
-            else if (cardmas == 1 && slave == 2) {
-                 Serial.println("Chiave rilevata!");
-                 EEPROM.write(0, 3);
-                 EEPROM.write(11, sernum0);
-                 EEPROM.write(12, sernum1);
-                 EEPROM.write(13, sernum2);
-                 EEPROM.write(14, sernum3);
-                 EEPROM.write(15, sernum4);
-                 Serial.println("Slave 3 salvata!");
-                 cardmas = 0;
-                 delay(3000);
-           }
-         }
-
-         delay(1000);
-       }
-                        
-       rfid.halt();
-}
-
-
-void checkStatusAlarm(){
+    // Legge il seriale...
+    if (rfid.readCardSerial()) {
+      sernum0 = rfid.serNum[0];
+      sernum1 = rfid.serNum[1];
+      sernum2 = rfid.serNum[2];
+      sernum3 = rfid.serNum[3];
+      sernum4 = rfid.serNum[4];
       
-   if(statusAlarm==DISABLED){
-          statusAlarm = ACTIVE;
-          Serial.println("ALLARME ATTIVO");
+      
+
+      // Se il seriale letto corrisponde con il seriale Master
+      // attiva o disattiva la modalita Memorizzazione chiavi
+      // e in più visualizza l'elenco della chiavi salvate...
+      if (sernum0 == masnum0 && sernum1 == masnum1 && sernum2 == masnum2 && sernum3 == masnum3 && sernum4 == masnum4) {
+        if (cardmas == 0) {
+          Serial.println("MODALITA' ADMIN");
+          delay(1000);
+          cardmas = 1;
+          Serial.println("Chiavi slave: ");
+          Serial.println(slave);
+        }
+        else {
+          cardmas = 0;
+          Serial.println("USCITA MODALITA ADMIN");
+          delay(1000);
+        }
+      }//end if
+
+      // Se invece il seriale letto corrisponde con uno dei tre gruppi
+      // di chiavi memorizzate allora attiva o disattiva il Led
+      else if ((sernum0 == EEPROM.read(1) && sernum1 == EEPROM.read(2) && sernum2 == EEPROM.read(3) && sernum3 == EEPROM.read(4) && sernum4 == EEPROM.read(5))
+               || (sernum0 == EEPROM.read(6) && sernum1 == EEPROM.read(7) && sernum2 == EEPROM.read(8) && sernum3 == EEPROM.read(9) && sernum4 == EEPROM.read(10))
+               || (sernum0 == EEPROM.read(11) && sernum1 == EEPROM.read(12) && sernum2 == EEPROM.read(13) && sernum3 == EEPROM.read(14) && sernum4 == EEPROM.read(15))) {
+
+        Serial.println("CHIAVE SLAVE VALIDA");
+
+        checkStatusAlarm();
+        delay(3000);
+
+      }
+      // Se il seriale letto è diverso dal master e non è presente in memoria,
+      // e se è attiva la modalita Memorizzazione chiavi, salva il seriale in memoria
+      // come slave1, slave2 o slave3.
+      else if (cardmas == 1 && slave == 0) {
+
+        Serial.println("Chiave rilevata!");
+        EEPROM.write(0, 1);
+        EEPROM.write(1, sernum0);
+        EEPROM.write(2, sernum1);
+        EEPROM.write(3, sernum2);
+        EEPROM.write(4, sernum3);
+        EEPROM.write(5, sernum4);
+        cardmas = 0;
+        Serial.println("Slave 1 salvata!");
+        storeNfcKey(String(sernum0,DEC) + String(sernum1,DEC) + String(sernum2,DEC) + String(sernum3,DEC) + String(sernum4,DEC));
+        delay(3000);
+
+      }
+      else if (cardmas == 1 && slave == 1) {
+
+        Serial.println("Chiave rilevata!");
+        EEPROM.write(0, 2);
+        EEPROM.write(6, sernum0);
+        EEPROM.write(7, sernum1);
+        EEPROM.write(8, sernum2);
+        EEPROM.write(9, sernum3);
+        EEPROM.write(10, sernum4);
+        cardmas = 0;
+        Serial.println("Slave 2 salvata!");
+        storeNfcKey(String(sernum0,DEC) + String(sernum1,DEC) + String(sernum2,DEC) + String(sernum3,DEC) + String(sernum4,DEC));
+        delay(3000);
+
+      }
+      else if (cardmas == 1 && slave == 2) {
+        Serial.println("Chiave rilevata!");
+        EEPROM.write(0, 3);
+        EEPROM.write(11, sernum0);
+        EEPROM.write(12, sernum1);
+        EEPROM.write(13, sernum2);
+        EEPROM.write(14, sernum3);
+        EEPROM.write(15, sernum4);
+        Serial.println("Slave 3 salvata!");
+        storeNfcKey(String(sernum0,DEC) + String(sernum1,DEC) + String(sernum2,DEC) + String(sernum3,DEC) + String(sernum4,DEC));
+        cardmas = 0;
+        delay(3000);
+      }
     }
 
-     else if(statusAlarm == ALARMED || statusAlarm == ACTIVE){
-          statusAlarm = DISABLED;
-          Serial.println("ALLARME DISATTIVATO"); 
-     }
-  
+    delay(1000);
+  }
+
+  rfid.halt();
 }
 
 
-void checkDistanceProximity(float temperature){
-     
+void checkStatusAlarm() {
+
+  if (statusAlarm == DISABLED) {
+    statusAlarm = ACTIVE;
+    Serial.println("ALLARME ATTIVO");
+  }
+
+  else if (statusAlarm == ALARMED || statusAlarm == ACTIVE) {
+    statusAlarm = DISABLED;
+    Serial.println("ALLARME DISATTIVATO");
+  }
+
+}
+
+
+
+/* SENSOR PROXIMITY */
+void checkDistanceProximity(float temperature) {
+
   //porta bassa l'uscita del trigger
   digitalWrite( triggerPort, LOW );
   //invia un impulso di 10microsec su trigger
   digitalWrite( triggerPort, HIGH );
   delayMicroseconds( 10 );
   digitalWrite( triggerPort, LOW );
-   
+
   long durata = pulseIn( echoPort, HIGH );
-  long distance = calcDistance(temperature,durata);
+  long distance = calcDistance(temperature, durata);
   Serial.print("DISTANZA ");
   Serial.println(distance);
   //Serial.println(distance);
-   
+
   //dopo 38ms è fuori dalla portata del sensore
-  if( durata > 38000 ){
+  if ( durata > 38000 ) {
     Serial.println("Fuori portata   ");
   }
- 
-  if(distance < 10 || statusAlarm == ALARMED){
-    
-   //l'allarme ha rilevato l'intrusione. Imposto lo stato corrente
-   statusAlarm = ALARMED;
-   digitalWrite(ledWhite,LOW);
-   digitalWrite(ledBlue,HIGH);
-   delay(300);
-   digitalWrite(ledWhite,HIGH);
-   digitalWrite(ledBlue,LOW);
+
+  if (distance < 10 || statusAlarm == ALARMED) {
+
+    //l'allarme ha rilevato l'intrusione. Imposto lo stato corrente
+    statusAlarm = ALARMED;
+    digitalWrite(ledWhite, LOW);
+    digitalWrite(ledBlue, HIGH);
+    delay(300);
+    digitalWrite(ledWhite, HIGH);
+    digitalWrite(ledBlue, LOW);
   }
-  else{
-   digitalWrite(ledWhite,HIGH);
-   digitalWrite(ledBlue,LOW);
- }
+  else {
+    digitalWrite(ledWhite, HIGH);
+    digitalWrite(ledBlue, LOW);
+  }
 }
 
 
- long calcDistance(float temperature, int durata){
-      float v = 331.4 + (0.62 * temperature);
-      Serial.println("TEMPERATURA");
-      Serial.println(temperature);
-      float cmmc= (float) v/10000;
-      long distance = cmmc * durata/2;
-      return distance;
+long calcDistance(float temperature, int durata) {
+  float v = 331.4 + (0.62 * temperature);
+  Serial.println("TEMPERATURA");
+  Serial.println(temperature);
+  float cmmc = (float) v / 10000;
+  long distance = cmmc * durata / 2;
+  return distance;
 
+}
+
+
+void initWifi() {
+
+
+
+  // check for the WiFi module:
+  if (WiFi.status() == WL_NO_MODULE) {
+    Serial.println("Communication with WiFi module failed!");
+    // don't continue
+    while (true);
   }
+
+  String fv = WiFi.firmwareVersion();
+  if (fv < WIFI_FIRMWARE_LATEST_VERSION) {
+    Serial.println("Please upgrade the firmware");
+  }
+
+  // attempt to connect to Wifi network:
+  while (status != WL_CONNECTED) {
+    Serial.print("Attempting to connect to WPA SSID: ");
+    Serial.println(ssid);
+    // Connect to WPA/WPA2 network:
+    status = WiFi.begin(ssid, pass);
+
+    // wait 10 seconds for connection:
+    delay(10000);
+  }
+
+  // you're connected now, so print out the data:
+  Serial.print("You're connected to the network");
+  printCurrentNet();
+  printWifiData();
+
+
+}
+
+
+
+/* WiFi */
+void printWifiData() {
+  // print your board's IP address:
+  IPAddress ip = WiFi.localIP();
+  Serial.print("IP Address: ");
+  Serial.println(ip);
+  Serial.println(ip);
+
+  // print your MAC address:
+  byte mac[6];
+  WiFi.macAddress(mac);
+  Serial.print("MAC address: ");
+  printMacAddress(mac);
+}
+
+void printCurrentNet() {
+  // print the SSID of the network you're attached to:
+  Serial.print("SSID: ");
+  Serial.println(WiFi.SSID());
+
+  // print the MAC address of the router you're attached to:
+  byte bssid[6];
+  WiFi.BSSID(bssid);
+  Serial.print("BSSID: ");
+  printMacAddress(bssid);
+
+  // print the received signal strength:
+  long rssi = WiFi.RSSI();
+  Serial.print("signal strength (RSSI):");
+  Serial.println(rssi);
+
+  // print the encryption type:
+  byte encryption = WiFi.encryptionType();
+  Serial.print("Encryption Type:");
+  Serial.println(encryption, HEX);
+  Serial.println();
+}
+
+void printMacAddress(byte mac[]) {
+  for (int i = 5; i >= 0; i--) {
+    if (mac[i] < 16) {
+      Serial.print("0");
+    }
+    Serial.print(mac[i], HEX);
+    if (i > 0) {
+      Serial.print(":");
+    }
+  }
+  Serial.println();
+}
+
+void storeNfcKey(String nfcKey) {
+  // Initialize the client library
+  WiFiClient client;
+
+
+  // if you get a connection, report back via serial:
+  if (client.connect(server, 80)) {
+    Serial.println("connected");
+    // Make a HTTP request:
+    client.print(String("GET /AlarmIoT_WebServer/public/api/user/registration?nfc_key=" + nfcKey) + " HTTP/1.1\r\n" +
+                 "Host: " + "192.168.0.104" + "\r\n" +
+                 "Connection: close\r\n" +
+                 "\r\n" +
+                 "Accept: application/json"
+                );
+    client.println();
+    Serial.println("[Response:]");
+    String line;
+    while (client.connected() || client.available())
+    {
+      if (client.available())
+      {
+        line = client.readStringUntil('\r');
+        Serial.println(line);
+      }
+    }
+
+
+    client.stop();
+    Serial.println("\n[Disconnected]");
+  }
+
+
+
+}
