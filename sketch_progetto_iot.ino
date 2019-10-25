@@ -4,12 +4,6 @@ const int ledBlue = 6;
 const int ledWhite = 4;
 
 
-//library dht22
-#include <DHT.h>
-//Constants
-#define DHTPIN 7     // what pin we're connected to
-#define DHTTYPE DHT22   // DHT 22  (AM2302)
-DHT dht(DHTPIN, DHTTYPE); //// Initialize DHT sensor for normal 16mhz Arduino
 
 //Variables
 int chk;
@@ -88,7 +82,7 @@ int status = WL_IDLE_STATUS;     // the Wifi radio's status
 #include <PubSubClient.h>
 
 #define ARDUINO_CLIENT_ID "arduino_uno_rev2"
-#define PUB_PROXIMITY "casa/database/registration_nfc"   // MTTQ topic for proximity [CM]
+#define PUB_REGISTRATION_USER_NFC "casa/database/user/registration"   // MTTQ topic for proximity [CM]
 #define CONNECTOR "mqtt"
 IPAddress server(192, 168, 0, 104);// MTTQ server IP address
 
@@ -99,7 +93,6 @@ PubSubClient client(wifiClient);
 /* HTTP CLIENT */
 #include <Bridge.h>
 #include <HttpClient.h>
-
 
 
 void initSensorProximity() {
@@ -120,26 +113,47 @@ void initPins() {
 
 
 
+
 /* END RFID  PROPERTY */
+
+
+
+
+//library dht22
+#include <DHT.h>
+//Constants
+#define DHTPIN 13     // what pin we're connected to
+#define DHTTYPE DHT22   // DHT 22  (AM2302)
+DHT dht(DHTPIN, DHTTYPE); //// Initialize DHT sensor for normal 16mhz Arduino
 
 void setup() {
 
 
   //Initialize serial and wait for port to open:
   Serial.begin(9600);
-  while (!Serial) {
-    ; // wait for serial port to connect. Needed for native USB port only
-  }
+
+
 
   initSensorProximity();
   initPins();
   initWifi();
-  //init temperature's sensor
-  dht.begin();
+
   //rfid init
   SPI.begin();
   rfid.init();
 
+   //init temperature's sensor
+  dht.begin();
+
+/*
+
+ EEPROM.write(0,0);
+ EEPROM.write(1,0);
+ EEPROM.write(2,0);
+ EEPROM.write(3,0);
+ EEPROM.write(4,0);
+ EEPROM.write(5,0); 
+*/
   /*
     Serial.println("MESSAGGIO DA INVIARE");
     // MTTQ parameters
@@ -151,11 +165,11 @@ void setup() {
 
     Serial.println("MESSAGGIO PUBBLICATO"); */
 
-
 }
 
 
 void loop() {
+
 
   //printCurrentNet();
 
@@ -167,14 +181,14 @@ void loop() {
 
   //read sensor's temperature
   float temperature = dht.readTemperature();
+  if(isnan(temperature)){
+    temperature = 20;
+  }
+  
   checkDistanceProximity(temperature);
 
-
-
-
-
-  //Aspetta 1 secondo
   delay(1000);
+
 }
 
 
@@ -196,6 +210,7 @@ void rfidRead() {
       // attiva o disattiva la modalita Memorizzazione chiavi
       // e in più visualizza l'elenco della chiavi salvate...
       if (sernum0 == masnum0 && sernum1 == masnum1 && sernum2 == masnum2 && sernum3 == masnum3 && sernum4 == masnum4) {
+        Serial.println("SONO QUI 0");
         if (cardmas == 0) {
           Serial.println("MODALITA' ADMIN");
           delay(1000);
@@ -214,30 +229,36 @@ void rfidRead() {
       // Se invece il seriale letto corrisponde con uno dei tre gruppi
       // di chiavi memorizzate allora attiva o disattiva il Led
       else if(slave>0) {
+        Serial.println("SONO QUI");
         int j=1;
         for(int i=1;i<=EEPROM.read(0);i++){
-            if(sernum0==EEPROM.read(j) && sernum1==EEPROM.read(j++) && sernum2==EEPROM.read(j++) && sernum3==EEPROM.read(j++) && sernum4==EEPROM.read(j++)){
-                Serial.println("CHIAVE SLAVE VALIDA, NUMERO :" + i);
+            if(sernum0==EEPROM.read(j) && sernum1==EEPROM.read(j+1) && sernum2==EEPROM.read(j+2) && sernum3==EEPROM.read(j+3) && sernum4==EEPROM.read(j+4)){
+                Serial.println("CHIAVE SLAVE VALIDA");
                 checkStatusAlarm();
             }
+
+            j=j+4;
         }
-        delay(3000);
+        delay(1000);
       }
 
       // Se il seriale letto è diverso dal master e non è presente in memoria,
       // e se è attiva la modalita Memorizzazione chiavi, salva il seriale in memoria come slave
       else if (cardmas == 1 ){
+        Serial.println("SONO QUI 2");
         int nextSlavePosition = (EEPROM.read(0)*5) +1;
         Serial.println("Chiave rilevata!");
+        Serial.println(nextSlavePosition +1);
         EEPROM.write(0, EEPROM.read(0) + 1);
         EEPROM.write(nextSlavePosition, sernum0);
-        EEPROM.write(nextSlavePosition++, sernum1);
-        EEPROM.write(nextSlavePosition++, sernum2);
-        EEPROM.write(nextSlavePosition++, sernum3);
-        EEPROM.write(nextSlavePosition++, sernum4);
-        Serial.println("Chiave salvata, NUMERO : " + EEPROM.read(0));
+        EEPROM.write(nextSlavePosition + 1, sernum1);
+        EEPROM.write(nextSlavePosition + 2, sernum2);
+        EEPROM.write(nextSlavePosition + 3, sernum3);
+        EEPROM.write(nextSlavePosition + 4, sernum4);
+        Serial.println("Chiave salvata");
+        Serial.println(nextSlavePosition);
         storeNfcKey(String(sernum0,DEC) + String(sernum1,DEC) + String(sernum2,DEC) + String(sernum3,DEC) + String(sernum4,DEC));
-        delay(3000);        
+        delay(1000);        
       }
     }
 
@@ -276,9 +297,6 @@ void checkDistanceProximity(float temperature) {
 
   long durata = pulseIn( echoPort, HIGH );
   long distance = calcDistance(temperature, durata);
-  Serial.print("DISTANZA ");
-  Serial.println(distance);
-  //Serial.println(distance);
 
   //dopo 38ms è fuori dalla portata del sensore
   if ( durata > 38000 ) {
@@ -304,8 +322,6 @@ void checkDistanceProximity(float temperature) {
 
 long calcDistance(float temperature, int durata) {
   float v = 331.4 + (0.62 * temperature);
-  Serial.println("TEMPERATURA");
-  Serial.println(temperature);
   float cmmc = (float) v / 10000;
   long distance = cmmc * durata / 2;
   return distance;
@@ -314,8 +330,6 @@ long calcDistance(float temperature, int durata) {
 
 
 void initWifi() {
-
-
 
   // check for the WiFi module:
   if (WiFi.status() == WL_NO_MODULE) {
@@ -331,19 +345,15 @@ void initWifi() {
 
   // attempt to connect to Wifi network:
   while (status != WL_CONNECTED) {
-    Serial.print("Attempting to connect to WPA SSID: ");
-    Serial.println(ssid);
-    // Connect to WPA/WPA2 network:
+        // Connect to WPA/WPA2 network:
     status = WiFi.begin(ssid, pass);
-
-    // wait 10 seconds for connection:
-    delay(10000);
+    delay(1000);
   }
 
   // you're connected now, so print out the data:
-  Serial.print("You're connected to the network");
-  printCurrentNet();
-  printWifiData();
+  Serial.println("You're connected to the network");
+  //printCurrentNet();
+  //printWifiData();
 
 
 }
@@ -354,36 +364,36 @@ void initWifi() {
 void printWifiData() {
   // print your board's IP address:
   IPAddress ip = WiFi.localIP();
-  Serial.print("IP Address: ");
+  Serial.println("IP Address: ");
   Serial.println(ip);
   Serial.println(ip);
 
   // print your MAC address:
   byte mac[6];
   WiFi.macAddress(mac);
-  Serial.print("MAC address: ");
-  printMacAddress(mac);
+  Serial.println("MAC address: ");
+  //printMacAddress(mac);
 }
 
 void printCurrentNet() {
   // print the SSID of the network you're attached to:
-  Serial.print("SSID: ");
+  Serial.println("SSID: ");
   Serial.println(WiFi.SSID());
 
   // print the MAC address of the router you're attached to:
   byte bssid[6];
   WiFi.BSSID(bssid);
-  Serial.print("BSSID: ");
+  Serial.println("BSSID: ");
   printMacAddress(bssid);
 
   // print the received signal strength:
   long rssi = WiFi.RSSI();
-  Serial.print("signal strength (RSSI):");
+  Serial.println("signal strength (RSSI):");
   Serial.println(rssi);
 
   // print the encryption type:
   byte encryption = WiFi.encryptionType();
-  Serial.print("Encryption Type:");
+  Serial.println("Encryption Type:");
   Serial.println(encryption, HEX);
   Serial.println();
 }
@@ -391,11 +401,11 @@ void printCurrentNet() {
 void printMacAddress(byte mac[]) {
   for (int i = 5; i >= 0; i--) {
     if (mac[i] < 16) {
-      Serial.print("0");
+      Serial.println("0");
     }
-    Serial.print(mac[i], HEX);
+    Serial.println(mac[i], HEX);
     if (i > 0) {
-      Serial.print(":");
+      Serial.println(":");
     }
   }
   Serial.println();
@@ -432,7 +442,4 @@ void storeNfcKey(String nfcKey) {
     client.stop();
     Serial.println("\n[Disconnected]");
   }
-
-
-
 }
