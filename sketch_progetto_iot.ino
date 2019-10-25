@@ -17,7 +17,6 @@ float hum;  //Stores humidity value
 float temp = 25; //Stores temperature value
 
 
-
 /* START RFID PROPERTY */
 
 
@@ -192,8 +191,6 @@ void rfidRead() {
       sernum2 = rfid.serNum[2];
       sernum3 = rfid.serNum[3];
       sernum4 = rfid.serNum[4];
-      
-      
 
       // Se il seriale letto corrisponde con il seriale Master
       // attiva o disattiva la modalita Memorizzazione chiavi
@@ -213,63 +210,34 @@ void rfidRead() {
         }
       }//end if
 
+
       // Se invece il seriale letto corrisponde con uno dei tre gruppi
       // di chiavi memorizzate allora attiva o disattiva il Led
-      else if ((sernum0 == EEPROM.read(1) && sernum1 == EEPROM.read(2) && sernum2 == EEPROM.read(3) && sernum3 == EEPROM.read(4) && sernum4 == EEPROM.read(5))
-               || (sernum0 == EEPROM.read(6) && sernum1 == EEPROM.read(7) && sernum2 == EEPROM.read(8) && sernum3 == EEPROM.read(9) && sernum4 == EEPROM.read(10))
-               || (sernum0 == EEPROM.read(11) && sernum1 == EEPROM.read(12) && sernum2 == EEPROM.read(13) && sernum3 == EEPROM.read(14) && sernum4 == EEPROM.read(15))) {
-
-        Serial.println("CHIAVE SLAVE VALIDA");
-
-        checkStatusAlarm();
+      else if(slave>0) {
+        int j=1;
+        for(int i=1;i<=EEPROM.read(0);i++){
+            if(sernum0==EEPROM.read(j) && sernum1==EEPROM.read(j++) && sernum2==EEPROM.read(j++) && sernum3==EEPROM.read(j++) && sernum4==EEPROM.read(j++)){
+                Serial.println("CHIAVE SLAVE VALIDA, NUMERO :" + i);
+                checkStatusAlarm();
+            }
+        }
         delay(3000);
-
       }
+
       // Se il seriale letto è diverso dal master e non è presente in memoria,
-      // e se è attiva la modalita Memorizzazione chiavi, salva il seriale in memoria
-      // come slave1, slave2 o slave3.
-      else if (cardmas == 1 && slave == 0) {
-
+      // e se è attiva la modalita Memorizzazione chiavi, salva il seriale in memoria come slave
+      else if (cardmas == 1 ){
+        int nextSlavePosition = (EEPROM.read(0)*5) +1;
         Serial.println("Chiave rilevata!");
-        EEPROM.write(0, 1);
-        EEPROM.write(1, sernum0);
-        EEPROM.write(2, sernum1);
-        EEPROM.write(3, sernum2);
-        EEPROM.write(4, sernum3);
-        EEPROM.write(5, sernum4);
-        cardmas = 0;
-        Serial.println("Slave 1 salvata!");
+        EEPROM.write(0, EEPROM.read(0) + 1);
+        EEPROM.write(nextSlavePosition, sernum0);
+        EEPROM.write(nextSlavePosition++, sernum1);
+        EEPROM.write(nextSlavePosition++, sernum2);
+        EEPROM.write(nextSlavePosition++, sernum3);
+        EEPROM.write(nextSlavePosition++, sernum4);
+        Serial.println("Chiave salvata, NUMERO : " + EEPROM.read(0));
         storeNfcKey(String(sernum0,DEC) + String(sernum1,DEC) + String(sernum2,DEC) + String(sernum3,DEC) + String(sernum4,DEC));
-        delay(3000);
-
-      }
-      else if (cardmas == 1 && slave == 1) {
-
-        Serial.println("Chiave rilevata!");
-        EEPROM.write(0, 2);
-        EEPROM.write(6, sernum0);
-        EEPROM.write(7, sernum1);
-        EEPROM.write(8, sernum2);
-        EEPROM.write(9, sernum3);
-        EEPROM.write(10, sernum4);
-        cardmas = 0;
-        Serial.println("Slave 2 salvata!");
-        storeNfcKey(String(sernum0,DEC) + String(sernum1,DEC) + String(sernum2,DEC) + String(sernum3,DEC) + String(sernum4,DEC));
-        delay(3000);
-
-      }
-      else if (cardmas == 1 && slave == 2) {
-        Serial.println("Chiave rilevata!");
-        EEPROM.write(0, 3);
-        EEPROM.write(11, sernum0);
-        EEPROM.write(12, sernum1);
-        EEPROM.write(13, sernum2);
-        EEPROM.write(14, sernum3);
-        EEPROM.write(15, sernum4);
-        Serial.println("Slave 3 salvata!");
-        storeNfcKey(String(sernum0,DEC) + String(sernum1,DEC) + String(sernum2,DEC) + String(sernum3,DEC) + String(sernum4,DEC));
-        cardmas = 0;
-        delay(3000);
+        delay(3000);        
       }
     }
 
