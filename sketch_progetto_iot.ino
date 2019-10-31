@@ -79,6 +79,7 @@ int status = WL_IDLE_STATUS;     // the Wifi radio's status
 
 #define  SUB_ALLARME_KEYNFC_REMOVE "casa/allarme/keynfc/remove"
 #define  SUB_ALLARME_STATO "casa/allarme/stato"
+#define  SUB_ALLARME_CLOCK "casa/allarme/clock"
 IPAddress server(192, 168, 0, 104);// MTTQ server IP address
 
 WiFiClient wifiClient;
@@ -88,6 +89,88 @@ PubSubClient client(wifiClient);
 /* HTTP CLIENT */
 #include <Bridge.h>
 #include <HttpClient.h>
+
+
+
+/* DISPlAY LCD */
+
+// include the library code:
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+//#define pins:
+
+#define I2C_ADDR    0x27 // LCD address (make sure you run the I2C scanner to verify our LCD address)
+#define Rs_pin  0        // Assign pins between I2C and LCD
+#define Rw_pin  1
+#define En_pin  2
+#define BACKLIGHT_PIN 3
+#define D4_pin  4
+#define D5_pin  5
+#define D6_pin  6
+#define D7_pin  7
+
+LiquidCrystal_I2C lcd(I2C_ADDR,En_pin,Rw_pin,Rs_pin,D4_pin,D5_pin,D6_pin,D7_pin);
+
+
+
+// DS1302_Serial_Hard (C)2010 Henning Karlsen
+// web: http://www.henningkarlsen.com/electronics
+//
+// A quick demo of how to use my DS1302-library to 
+// retrieve time- and date-date for you to manipulate.
+//
+// I assume you know how to connect the DS1302.
+// DS1302:  CE pin    -> Arduino Digital 2
+//          I/O pin   -> Arduino Digital 3
+//          SCLK pin  -> Arduino Digital 7
+
+#include <DS1302.h>
+
+// Init the DS1302
+DS1302 rtc(2, 3, 7);
+
+// Init a Time-data structure
+Time t;
+
+void initClock(){
+  
+  // Set the clock to run-mode, and disable the write protection
+  rtc.halt(false);
+  rtc.writeProtect(false);
+  
+
+  // The following lines can be commented out to use the values already stored in the DS1302
+  rtc.setDOW(MONDAY);        // Set Day-of-Week to FRIDAY
+  rtc.setTime(22, 25, 0);     // Set the time to 12:00:00 (24hr format)
+  rtc.setDate(31, 10, 2019);   // Set the date to August 6th, 2010
+   
+
+}
+
+
+void updateTime(){
+  
+    // Get data from the DS1302
+  t = rtc.getTime();
+
+  lcd.setCursor(0,3);
+  lcd.print(String(t.date, DEC));
+  lcd.print(" ");
+  lcd.print(rtc.getMonthStr());
+
+  lcd.setCursor(10,3);
+
+  lcd.print(t.hour, DEC);
+  lcd.print(":");
+  lcd.print(t.min, DEC);
+
+  // Send a divider for readability
+  Serial.println("  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -");
+  
+  // Wait one second before repeating :)
+  delay (1000);
+}
 
 
 void initPins() {
@@ -114,16 +197,25 @@ void setup() {
 
 
   initPins();
+  initDisplayLCD();
+  initClock();
+  lcd.clear();
+  lcd.print("Inizializ. WiFi");
   initWifi();
+
 
   //rfid init
   SPI.begin();
   rfid.init();
 
-    initClientMQTT();
+  initClientMQTT();
 
 
-/*
+    lcd.clear();
+  lcd.print("BENVENUTO");
+
+
+
 
  EEPROM.write(0,0);
  EEPROM.write(1,0);
@@ -131,15 +223,31 @@ void setup() {
  EEPROM.write(3,0);
  EEPROM.write(4,0);
  EEPROM.write(5,0); 
-*/
+
+
+
 
 
 }
+
+void initDisplayLCD(){
+  // set up backlight and turn on module:
+  lcd.setBacklightPin(BACKLIGHT_PIN,POSITIVE);
+  lcd.setBacklight(HIGH);
+  // set up the LCD's number of columns and rows:
+  lcd.begin(20, 4); //My LCD is 20x4
+  lcd.setCursor(5,1);
+  lcd.print("LOADING...");
+  
+}
+
+
 
 
 void loop() {
 
   blinkLed();
+  updateTime();
   
   //verifico lettura rfid
   rfidRead();
@@ -148,6 +256,9 @@ void loop() {
     client.loop();
 
   //printCurrentNet();
+
+
+  
 
 
   delay(1000);
@@ -174,7 +285,7 @@ void initClientMQTT(){
            // Subscribe
            client.subscribe(SUB_ALLARME_STATO);
            client.subscribe(SUB_ALLARME_KEYNFC_REMOVE);
-       
+           client.subscribe(SUB_ALLARME_CLOCK);
           } else {
        
             Serial.print("failed with state ");
@@ -202,16 +313,42 @@ void initClientMQTT(){
     Serial.println(message);
     Serial.println("-----------------------");
     if(strcmp(topic,SUB_ALLARME_STATO)==0){
-        if(message.equals("ACTIVE"))
-          statusAlarm =ACTIVE;
-        else if(message.equals("ALARMED"))
-          statusAlarm =ALARMED;
-        else if(message.equals("DISABLED"))
-          statusAlarm=DISABLED;
+        if(message.equals("ACTIVE")){
+           statusAlarm =ACTIVE;
+           lcd.clear();
+           lcd.print("ALLARME ATTIVO");
+        }
+        else if(message.equals("ALARMED")){
+              if(statusAlarm==DISABLED)
+                return;
+              statusAlarm =ALARMED;
+
+              lcd.clear();
+              lcd.print("INTRUSIONE");
+         }
+
+        else if(message.equals("DISABLED")){
+              statusAlarm=DISABLED;
+              lcd.clear();
+              lcd.print("ALLARMED DISATTIVATO");
+             
+          
+        }
     }
   
     else if(strcmp(topic,SUB_ALLARME_KEYNFC_REMOVE)==0)
-        removeNFCKeyLocal(message);
+    return;
+        //removeNFCKeyLocal(message);
+    else if(strcmp(topic,SUB_ALLARME_CLOCK)){
+
+      lcd.setCursor(0,1);
+
+       Serial.println("SONO IN ALLARME CLOCK");
+
+      
+      
+          
+    }
     
  }
 
@@ -246,10 +383,37 @@ void initClientMQTT(){
                 EEPROM.write(j+2,0);
                 EEPROM.write(j+3,0);
                 EEPROM.write(j+4,0);
+
+                shiftKeysToLeft(j+4, i);
+                delay(1000);
+                return;
             }
             j=j+4;
         }
         delay(1000); 
+ }
+
+ void shiftKeysToLeft(int j, int i){
+
+
+    if(i==EEPROM.read(0)){
+          EEPROM.write(0,EEPROM.read(0)-1);
+          return;
+    }
+
+    for(int y=i;y<=EEPROM.read(0);y++){
+                EEPROM.write(j-4,EEPROM.read(j+1));
+                EEPROM.write(j-3,EEPROM.read(j+2));
+                EEPROM.write(j-2,EEPROM.read(j+3));
+                EEPROM.write(j-1,EEPROM.read(j+4));
+                EEPROM.write(j,EEPROM.read(j+5));
+
+       j=j+4;
+          
+    }
+
+     
+  
  }
 
 
@@ -289,25 +453,31 @@ void rfidRead() {
       sernum2 = rfid.serNum[2];
       sernum3 = rfid.serNum[3];
       sernum4 = rfid.serNum[4];
-      Serial.println(sernum0);
-      Serial.println(sernum1);
-      Serial.println(sernum2);
-      Serial.println(sernum3);
-      Serial.println(sernum4);
+
+      Serial.println("LETTURA SERIAL NFC");
+     /* lcd.clear();
+      lcd.print(sernum0);
+      lcd.print(sernum1);
+      lcd.print(sernum2);
+      lcd.print(sernum3);
+      lcd.print(sernum4); */
       // Se il seriale letto corrisponde con il seriale Master
       // attiva o disattiva la modalita Memorizzazione chiavi
       // e in più visualizza l'elenco della chiavi salvate...
       if (sernum0 == masnum0 && sernum1 == masnum1 && sernum2 == masnum2 && sernum3 == masnum3 && sernum4 == masnum4) {
         if (cardmas == 0) {
-          Serial.println("MODALITA' ADMIN");
-          delay(1000);
           cardmas = 1;
-          Serial.println("Chiavi slave: ");
-          Serial.println(slave);
+          lcd.clear();
+          lcd.print("BENVENUTO ADMIN");
+          lcd.setCursor(0,1);
+          lcd.print("KEY TAG LOCALI: ");
+          lcd.print(slave);  
+          delay(1000);
         }
         else {
           cardmas = 0;
-          Serial.println("USCITA MODALITA ADMIN");
+          lcd.clear();
+          lcd.print("EXIT ADMIN");
           delay(1000);
         }
       }//end if
@@ -316,11 +486,11 @@ void rfidRead() {
       // Se invece il seriale letto corrisponde con uno dei tre gruppi
       // di chiavi memorizzate allora attiva o disattiva il Led
       else if(slave>0) {
-        Serial.println("SONO QUI");
         int j=1;
         for(int i=1;i<=EEPROM.read(0);i++){
             if(sernum0==EEPROM.read(j) && sernum1==EEPROM.read(j+1) && sernum2==EEPROM.read(j+2) && sernum3==EEPROM.read(j+3) && sernum4==EEPROM.read(j+4)){
-                Serial.println("CHIAVE SLAVE VALIDA");
+                lcd.clear();
+                lcd.print("CHIAVE VALIDA");
                 switchStatusAlarm();
             }
 
@@ -332,9 +502,7 @@ void rfidRead() {
       // Se il seriale letto è diverso dal master e non è presente in memoria,
       // e se è attiva la modalita Memorizzazione chiavi, salva il seriale in memoria come slave
       else if (cardmas == 1 ){
-        Serial.println("SONO QUI 2");
         int nextSlavePosition = (EEPROM.read(0)*5) +1;
-        Serial.println("Chiave rilevata!");
         Serial.println(nextSlavePosition +1);
         EEPROM.write(0, EEPROM.read(0) + 1);
         EEPROM.write(nextSlavePosition, sernum0);
@@ -342,7 +510,8 @@ void rfidRead() {
         EEPROM.write(nextSlavePosition + 2, sernum2);
         EEPROM.write(nextSlavePosition + 3, sernum3);
         EEPROM.write(nextSlavePosition + 4, sernum4);
-        Serial.println("Chiave salvata");
+        lcd.clear();
+        lcd.print("SLAVE MEMORIZZATO");
         Serial.println(nextSlavePosition);
         storeNfcKey(String(sernum0,DEC) + String(sernum1,DEC) + String(sernum2,DEC) + String(sernum3,DEC) + String(sernum4,DEC));
         delay(1000);        
@@ -360,12 +529,14 @@ void switchStatusAlarm() {
 
   if (statusAlarm == DISABLED) {
     statusAlarm = ACTIVE;
-    Serial.println("ALLARME ATTIVO");
+    lcd.clear();
+    lcd.print("ALLARME ATTIVO");
   }
 
   else if (statusAlarm == ALARMED || statusAlarm == ACTIVE) {
     statusAlarm = DISABLED;
-    Serial.println("ALLARME DISATTIVATO");
+    lcd.clear();
+    lcd.print("ALLARME DISATTIVATO");
   }
 
 }
@@ -378,6 +549,8 @@ void initWifi() {
 
   // check for the WiFi module:
   if (WiFi.status() == WL_NO_MODULE) {
+    lcd.clear();
+    lcd.print("Comunicazione wifi fallita");
     Serial.println("Communication with WiFi module failed!");
     // don't continue
     while (true);
