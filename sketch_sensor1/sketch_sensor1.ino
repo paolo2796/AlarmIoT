@@ -31,7 +31,7 @@ DHT dht(DHTPIN, DHTTYPE); //// Initialize DHT sensor for normal 16mhz Arduino
 
 #define SENSOR1_ID "sensor1"
 #define CONNECTOR "mqtt"
-IPAddress server(192, 168, 0, 104);// MTTQ server IP address
+IPAddress server(192, 168, 0, 107);// MTTQ server IP address
 
 WiFiClient wifiClient;
 PubSubClient client(wifiClient);
@@ -86,7 +86,7 @@ void initClientMQTT(){
   
   
     client.setServer(server, 1883);
-    client.setCallback(callback);
+    //client.setCallback(callback);
 
 
    while (!client.connected()) {
@@ -124,13 +124,14 @@ void checkDistanceProximity(float temperature) {
 
   //dopo 38ms è fuori dalla portata del sensore
   if ( durata > 38000 ) {
-    Serial.println("Fuori portata   ");
+    //Serial.println("Fuori portata   ");
   }
 
-  Serial.println("DISTANZA");
-  Serial.println(distance);
+  //Serial.println("DISTANZA");
+  //Serial.println(distance);
 
   if (distance < 10) {
+    Serial.println("STO DENTRO");
     //l'allarme ha rilevato l'intrusione. Imposto lo stato corrente
      client.publish("casa/allarme/stato","ALARMED",2); // true means retain
   }
@@ -152,14 +153,14 @@ void initWifi() {
 
   // check for the WiFi module:
   if (WiFi.status() == WL_NO_MODULE) {
-    Serial.println("Communication with WiFi module failed!");
+    //Serial.println("Communication with WiFi module failed!");
     // don't continue
     while (true);
   }
 
   String fv = WiFi.firmwareVersion();
   if (fv < WIFI_FIRMWARE_LATEST_VERSION) {
-    Serial.println("Please upgrade the firmware");
+    //Serial.println("Please upgrade the firmware");
   }
 
   // attempt to connect to Wifi network:
@@ -170,18 +171,18 @@ void initWifi() {
   }
 
   // you're connected now, so print out the data:
-  Serial.println("You're connected to the network");
+  //Serial.println("You're connected to the network");
   //printCurrentNet();
   //printWifiData();
 
 
 }
 
-
+/*
 void callback(char* topic, byte* payload, unsigned int length) {
  
   Serial.print("Message arrived in topic: ");
-  Serial.println(topic);
+  //Serial.println(topic);
  
   Serial.print("Message:");
   String message = "";
@@ -190,10 +191,10 @@ void callback(char* topic, byte* payload, unsigned int length) {
   }
 
  
-  Serial.println(message);
-  Serial.println("-----------------------");
+  //Serial.println(message);
+  //Serial.println("-----------------------");
 
-}
+} */
 
 
 

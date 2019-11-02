@@ -80,7 +80,7 @@ int status = WL_IDLE_STATUS;     // the Wifi radio's status
 #define  SUB_ALLARME_KEYNFC_REMOVE "casa/allarme/keynfc/remove"
 #define  SUB_ALLARME_STATO "casa/allarme/stato"
 #define  SUB_ALLARME_CLOCK "casa/allarme/clock"
-IPAddress server(192, 168, 0, 104);// MTTQ server IP address
+IPAddress server(192, 168, 0, 107);// MTTQ server IP address
 
 WiFiClient wifiClient;
 PubSubClient client(wifiClient);
@@ -132,6 +132,7 @@ DS1302 rtc(2, 3, 7);
 
 // Init a Time-data structure
 Time t;
+String clockProgramming="";
 
 void initClock(){
   
@@ -142,7 +143,7 @@ void initClock(){
 
   // The following lines can be commented out to use the values already stored in the DS1302
   rtc.setDOW(MONDAY);        // Set Day-of-Week to FRIDAY
-  rtc.setTime(22, 25, 0);     // Set the time to 12:00:00 (24hr format)
+  rtc.setTime(16, 10, 0);     // Set the time to 12:00:00 (24hr format)
   rtc.setDate(31, 10, 2019);   // Set the date to August 6th, 2010
    
 
@@ -158,20 +159,38 @@ void updateTime(){
   lcd.print(String(t.date, DEC));
   lcd.print(" ");
   lcd.print(rtc.getMonthStr());
-
-  lcd.setCursor(10,3);
+  lcd.setCursor(11,3);
 
   lcd.print(t.hour, DEC);
   lcd.print(":");
-  lcd.print(t.min, DEC);
+  lcd.print(t.min);
 
-  // Send a divider for readability
-  Serial.println("  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -");
   
   // Wait one second before repeating :)
   delay (1000);
 }
 
+void checkClockProgramming(){
+    
+    // Get data from the DS1302
+  t = rtc.getTime();
+  
+    String timeCurrent = String(t.hour);
+    timeCurrent.concat(":");
+    timeCurrent.concat(t.min);
+
+    if(timeCurrent.equals(clockProgramming)){
+      if(statusAlarm==ACTIVE || statusAlarm == ALARMED)
+        return;
+        
+        statusAlarm=ACTIVE;
+        lcd.setCursor(0,0);
+        lcd.print("                                                  ");
+        lcd.setCursor(0,0);
+        lcd.print("ALLARME ATTIVO");  
+    }
+      
+}
 
 void initPins() {
 
@@ -215,14 +234,14 @@ void setup() {
   lcd.print("BENVENUTO");
 
 
-
+/*
 
  EEPROM.write(0,0);
  EEPROM.write(1,0);
  EEPROM.write(2,0);
  EEPROM.write(3,0);
  EEPROM.write(4,0);
- EEPROM.write(5,0); 
+ EEPROM.write(5,0);  */
 
 
 
@@ -248,6 +267,7 @@ void loop() {
 
   blinkLed();
   updateTime();
+  checkClockProgramming();
   
   //verifico lettura rfid
   rfidRead();
@@ -255,13 +275,11 @@ void loop() {
     //maintain connection mqtt
     client.loop();
 
-  //printCurrentNet();
-
 
   
 
 
-  delay(1000);
+  delay(500);
 
 }
 
@@ -332,22 +350,16 @@ void initClientMQTT(){
               lcd.clear();
               lcd.print("ALLARMED DISATTIVATO");
              
-          
+         
         }
     }
   
     else if(strcmp(topic,SUB_ALLARME_KEYNFC_REMOVE)==0)
-    return;
+          return;
         //removeNFCKeyLocal(message);
-    else if(strcmp(topic,SUB_ALLARME_CLOCK)){
-
+    else if(strcmp(topic,SUB_ALLARME_CLOCK)==0){
       lcd.setCursor(0,1);
-
-       Serial.println("SONO IN ALLARME CLOCK");
-
-      
-      
-          
+      clockProgramming = message;
     }
     
  }
@@ -385,12 +397,10 @@ void initClientMQTT(){
                 EEPROM.write(j+4,0);
 
                 shiftKeysToLeft(j+4, i);
-                delay(1000);
                 return;
             }
             j=j+4;
         }
-        delay(1000); 
  }
 
  void shiftKeysToLeft(int j, int i){
@@ -424,7 +434,7 @@ void blinkLed(){
       else if(statusAlarm==ALARMED){
           digitalWrite(ledBlue,HIGH);
           digitalWrite(ledWhite,LOW);
-          delay(1000);
+          delay(500);
           digitalWrite(ledWhite,HIGH);
           digitalWrite(ledBlue,LOW);
          
@@ -472,13 +482,14 @@ void rfidRead() {
           lcd.setCursor(0,1);
           lcd.print("KEY TAG LOCALI: ");
           lcd.print(slave);  
-          delay(1000);
         }
         else {
           cardmas = 0;
           lcd.clear();
           lcd.print("EXIT ADMIN");
           delay(1000);
+          lcd.setCursor(0,0);
+          lcd.print("                     ");
         }
       }//end if
 
@@ -496,7 +507,6 @@ void rfidRead() {
 
             j=j+4;
         }
-        delay(1000);
       }
 
       // Se il seriale letto è diverso dal master e non è presente in memoria,
@@ -511,14 +521,15 @@ void rfidRead() {
         EEPROM.write(nextSlavePosition + 3, sernum3);
         EEPROM.write(nextSlavePosition + 4, sernum4);
         lcd.clear();
-        lcd.print("SLAVE MEMORIZZATO");
+        lcd.print("REGISTRAZIONE IN CORSO");
         Serial.println(nextSlavePosition);
         storeNfcKey(String(sernum0,DEC) + String(sernum1,DEC) + String(sernum2,DEC) + String(sernum3,DEC) + String(sernum4,DEC));
-        delay(1000);        
+        lcd.setCursor(0,0);
+        lcd.print("                   ");
+       
       }
     }
 
-    delay(1000);
   }
 
   rfid.halt();
@@ -638,7 +649,7 @@ void storeNfcKey(String nfcKey) {
     Serial.println("connected");
     // Make a HTTP request:
     client.print(String("GET /AlarmIoT_WebServer/public/api/user/registration?nfc_key=" + nfcKey) + " HTTP/1.1\r\n" +
-                 "Host: " + "192.168.0.104" + "\r\n" +
+                 "Host: " + "192.168.0.107" + "\r\n" +
                  "Connection: close\r\n" +
                  "\r\n" +
                  "Accept: application/json"
