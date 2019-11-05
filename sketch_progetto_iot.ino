@@ -1,8 +1,8 @@
+#include <ArduinoJson.h>
+
+
 const int ledBlue = 6;
 const int ledWhite = 4;
-
-
-
 
 /* START RFID PROPERTY */
 
@@ -74,7 +74,7 @@ int status = WL_IDLE_STATUS;     // the Wifi radio's status
 
 #include <PubSubClient.h>
 
-#define ARDUINO_CLIENT_ID "arduino_uno_rev2"
+#define ARDUINO_CLIENT_ID "centralina_mc"
 #define CONNECTOR "mqtt"
 
 #define  SUB_ALLARME_KEYNFC_REMOVE "casa/allarme/keynfc/remove"
@@ -331,12 +331,28 @@ void initClientMQTT(){
     Serial.println(message);
     Serial.println("-----------------------");
     if(strcmp(topic,SUB_ALLARME_STATO)==0){
-        if(message.equals("ACTIVE")){
+          StaticJsonDocument<200> doc;
+         DeserializationError error = deserializeJson(doc, message);
+          // Test if parsing succeeds.
+          if (error) {
+            Serial.print(F("deserializeJson() failed: "));
+            Serial.println(error.c_str());
+            return;
+         }
+
+           // Fetch values.
+          //
+          // Most of the time, you can rely on the implicit casts.
+          // In other case, you can do doc["time"].as<long>();
+          const char* client_id = doc["client_id"];
+          String  data = doc["data"];
+
+        if(data.equals("StatusAlarm.ACTIVE")){
            statusAlarm =ACTIVE;
            lcd.clear();
            lcd.print("ALLARME ATTIVO");
         }
-        else if(message.equals("ALARMED")){
+        else if(data.equals("StatusAlarm.ALARMED")){
               if(statusAlarm==DISABLED)
                 return;
               statusAlarm =ALARMED;
@@ -345,7 +361,7 @@ void initClientMQTT(){
               lcd.print("INTRUSIONE");
          }
 
-        else if(message.equals("DISABLED")){
+        else if(data.equals("StatusAlarm.DISABLED")){
               statusAlarm=DISABLED;
               lcd.clear();
               lcd.print("ALLARMED DISATTIVATO");
@@ -542,12 +558,15 @@ void switchStatusAlarm() {
     statusAlarm = ACTIVE;
     lcd.clear();
     lcd.print("ALLARME ATTIVO");
+    client.publish("casa/allarme/stato","{\"client_id\":\"" ARDUINO_CLIENT_ID  "\",\"data\":\"ACTIVE\"}",2);
+
   }
 
   else if (statusAlarm == ALARMED || statusAlarm == ACTIVE) {
     statusAlarm = DISABLED;
     lcd.clear();
     lcd.print("ALLARME DISATTIVATO");
+    client.publish("casa/allarme/stato","{\"client_id\":\"" ARDUINO_CLIENT_ID  "\",\"data\":\"DISABLED\"}",2);
   }
 
 }

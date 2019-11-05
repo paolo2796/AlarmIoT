@@ -1,3 +1,6 @@
+#include <ArduinoJson.h>
+
+
 #include <WiFiNINA.h>
 ///////please enter your sensitive data in the Secret tab/arduino_secrets.h
 char ssid[] = "SuperFibra2 2.4GHz";        // your network SSID (name)
@@ -31,20 +34,22 @@ DHT dht(DHTPIN, DHTTYPE); //// Initialize DHT sensor for normal 16mhz Arduino
 
 #define SENSOR1_ID "sensor1"
 #define CONNECTOR "mqtt"
-IPAddress server(192, 168, 0, 107);// MTTQ server IP address
+IPAddress server(192,168,0,102);// MTTQ server IP address
 
 WiFiClient wifiClient;
 PubSubClient client(wifiClient);
 
 
-
-enum AlarmStatus {
-  ACTIVE,
+enum StatusSensor {
+  ENABLED,
   DISABLED,
-  ALARMED
 };
 
+StatusSensor statusSensor;
+
 void setup() {
+
+  statusSensor = ENABLED;
   // put your setup code here, to run once:
 
     //Initialize serial and wait for port to open:
@@ -62,13 +67,18 @@ void setup() {
 void loop() {
   // put your main code here, to run repeatedly:
 
+
   client.loop();
+
+  
+  if(statusSensor == DISABLED)
+    return;
 
     //read sensor's temperature
   float temperature = dht.readTemperature();
   checkDistanceProximity(temperature);
 
-delay(1000);
+  delay(1000);
 }
 
 
@@ -86,7 +96,7 @@ void initClientMQTT(){
   
   
     client.setServer(server, 1883);
-    //client.setCallback(callback);
+    client.setCallback(callback);
 
 
    while (!client.connected()) {
@@ -95,6 +105,9 @@ void initClientMQTT(){
     if (client.connect(SENSOR1_ID,"paolo", "paoletto")) {
  
       Serial.println("connected");  
+      client.subscribe("casa/sensori/request");
+      client.subscribe("casa/sensori/" SENSOR1_ID);
+
 
  
     } else {
@@ -133,7 +146,7 @@ void checkDistanceProximity(float temperature) {
   if (distance < 10) {
     Serial.println("STO DENTRO");
     //l'allarme ha rilevato l'intrusione. Imposto lo stato corrente
-     client.publish("casa/allarme/stato","ALARMED",2); // true means retain
+     client.publish("casa/allarme/stato","{\"client_id\":\"sensor1\",\"data\":\"ALARMED\"}",2);
   }
 
 }
@@ -146,6 +159,43 @@ long calcDistance(float temperature, int durata) {
   return distance;
 
 }
+
+
+void callback(char* topic, byte* payload, unsigned int length) {
+ 
+    Serial.print("Message arrived in topic: ");
+    Serial.println(topic);
+   
+    Serial.println("Message:");
+    String message = "";
+    for (int i = 0; i < length; i++) {
+      message = message + (char)payload[i];
+    }
+  
+   
+    Serial.println(message);
+    Serial.println("-----------------------");
+    if(strcmp(topic,"casa/sensori/request")==0){
+      if(statusSensor==ENABLED)
+        client.publish("casa/sensori/response","{\"client_id\":\"sensor1\",\"enabled\":true}");
+      else
+        client.publish("casa/sensori/response","{\"client_id\":\"sensor1\",\"disabled\":true}");
+    }
+
+    else if(strcmp(topic,"casa/sensori/" SENSOR1_ID)==0){
+
+      Serial.println("AFAMMOK");
+
+          if(message.equals("disabled"))
+              statusSensor = DISABLED;
+          else if(message.equals("enabled")){
+              statusSensor = ENABLED;
+          }
+    }
+  
+    
+ }
+
 
 
 
