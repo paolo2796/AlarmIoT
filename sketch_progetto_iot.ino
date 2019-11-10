@@ -79,8 +79,9 @@ int status = WL_IDLE_STATUS;     // the Wifi radio's status
 
 #define  SUB_ALLARME_KEYNFC_REMOVE "casa/allarme/keynfc/remove"
 #define  SUB_ALLARME_STATO "casa/allarme/stato"
-#define  SUB_ALLARME_CLOCK "casa/allarme/clock"
-IPAddress server(192, 168, 0, 107);// MTTQ server IP address
+#define  SUB_ALLARME_CLOCK_SET "casa/allarme/clock/set"
+#define  SUB_ALLARME_CLOCK_GET "casa/allarme/clock/request"
+IPAddress server(192, 168, 2, 196);// MTTQ server IP address
 
 WiFiClient wifiClient;
 PubSubClient client(wifiClient);
@@ -132,7 +133,7 @@ DS1302 rtc(2, 3, 7);
 
 // Init a Time-data structure
 Time t;
-String clockProgramming="";
+String clockProgramming="none";
 
 void initClock(){
   
@@ -188,6 +189,8 @@ void checkClockProgramming(){
         lcd.print("                                                  ");
         lcd.setCursor(0,0);
         lcd.print("ALLARME ATTIVO");  
+        client.publish("casa/allarme/stato","{\"client_id\":\"" ARDUINO_CLIENT_ID  "\",\"data\":\"ACTIVE\"}",2);
+
     }
       
 }
@@ -303,7 +306,9 @@ void initClientMQTT(){
            // Subscribe
            client.subscribe(SUB_ALLARME_STATO);
            client.subscribe(SUB_ALLARME_KEYNFC_REMOVE);
-           client.subscribe(SUB_ALLARME_CLOCK);
+           client.subscribe(SUB_ALLARME_CLOCK_GET);
+           client.subscribe(SUB_ALLARME_CLOCK_SET);
+
           } else {
        
             Serial.print("failed with state ");
@@ -348,11 +353,13 @@ void initClientMQTT(){
           String  data = doc["data"];
 
         if(data.equals("StatusAlarm.ACTIVE")){
+          Serial.println("ACTIVE");
            statusAlarm =ACTIVE;
            lcd.clear();
            lcd.print("ALLARME ATTIVO");
         }
         else if(data.equals("StatusAlarm.ALARMED")){
+          Serial.println("ALARMED");
               if(statusAlarm==DISABLED)
                 return;
               statusAlarm =ALARMED;
@@ -362,6 +369,7 @@ void initClientMQTT(){
          }
 
         else if(data.equals("StatusAlarm.DISABLED")){
+          Serial.println("DISABLED");
               statusAlarm=DISABLED;
               lcd.clear();
               lcd.print("ALLARMED DISATTIVATO");
@@ -373,9 +381,17 @@ void initClientMQTT(){
     else if(strcmp(topic,SUB_ALLARME_KEYNFC_REMOVE)==0)
           return;
         //removeNFCKeyLocal(message);
-    else if(strcmp(topic,SUB_ALLARME_CLOCK)==0){
+    else if(strcmp(topic,SUB_ALLARME_CLOCK_SET)==0){
       lcd.setCursor(0,1);
       clockProgramming = message;
+    }
+
+    else if(strcmp(topic,SUB_ALLARME_CLOCK_GET)==0){
+      lcd.setCursor(0,1);
+      char stringachar[6];
+      clockProgramming.toCharArray(stringachar,6);
+      client.publish("casa/allarme/clock/response",stringachar,2);
+
     }
     
  }
@@ -444,7 +460,7 @@ void initClientMQTT(){
 
 
 void blinkLed(){
-  
+
       if(statusAlarm==ACTIVE)
           digitalWrite(ledWhite,HIGH);
       else if(statusAlarm==ALARMED){

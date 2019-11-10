@@ -34,7 +34,7 @@ DHT dht(DHTPIN, DHTTYPE); //// Initialize DHT sensor for normal 16mhz Arduino
 
 #define SENSOR1_ID "sensor1"
 #define CONNECTOR "mqtt"
-IPAddress server(192,168,0,102);// MTTQ server IP address
+IPAddress server(192,168,0,103);// MTTQ server IP address
 
 WiFiClient wifiClient;
 PubSubClient client(wifiClient);
@@ -57,7 +57,7 @@ void setup() {
   initSensorProximity();
   //init temperature's sensor
   dht.begin();
-    initWifi();
+  initWifi();
   initClientMQTT();
   
 
@@ -140,13 +140,12 @@ void checkDistanceProximity(float temperature) {
     //Serial.println("Fuori portata   ");
   }
 
-  //Serial.println("DISTANZA");
-  //Serial.println(distance);
 
   if (distance < 10) {
-    Serial.println("STO DENTRO");
+    Serial.println("INTRUSIONE");
+
     //l'allarme ha rilevato l'intrusione. Imposto lo stato corrente
-     client.publish("casa/allarme/stato","{\"client_id\":\"sensor1\",\"data\":\"ALARMED\"}",2);
+     client.publish("casa/allarme/stato","{\"client_id\":\"sensor1\",\"data\":\"StatusAlarm.ALARMED\"}",2);
   }
 
 }
@@ -228,23 +227,6 @@ void initWifi() {
 
 }
 
-/*
-void callback(char* topic, byte* payload, unsigned int length) {
- 
-  Serial.print("Message arrived in topic: ");
-  //Serial.println(topic);
- 
-  Serial.print("Message:");
-  String message = "";
-  for (int i = 0; i < length; i++) {
-    message = message + (char)payload[i];
-  }
-
- 
-  //Serial.println(message);
-  //Serial.println("-----------------------");
-
-} */
 
 
 
