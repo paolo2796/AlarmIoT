@@ -1,15 +1,20 @@
 #include <ArduinoJson.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <SPI.h>
+#include <RFID.h>
+#include <EEPROM.h>
+#include <WiFiNINA.h>
+#include <PubSubClient.h>
+#include <Bridge.h>
+#include <HttpClient.h>
+#include <DS1302.h>
 
 
-const int ledBlue = 6;
-const int ledWhite = 4;
-
-/* START RFID PROPERTY */
 
 
 /**
   ACCENSIONE LED CON RFID
-  Per maggiori info: www.progettiarduino.com
   Importante, collegare il lettore RFID ai pin di Arduino uno come segue:
   MOSI: Pin 11 / ICSP-4
   MISO: Pin 12 / ICSP-1
@@ -19,13 +24,6 @@ const int ledWhite = 4;
 */
 
 // FOR ARDUINO MEGA MOSI  MISO  SCK SS (slave)  SS (master) Level
-
-//Mega1280 or Mega2560  51     50   52  53  - 5V
-#include <SPI.h>
-#include <RFID.h>
-#include <EEPROM.h>
-
-
 #define SS_PIN 10
 #define RST_PIN 9
 
@@ -38,13 +36,48 @@ const int ledWhite = 4;
 
 
 
-#define resetkey 6
+#define ARDUINO_CLIENT_ID "centralina_mc"
+#define CONNECTOR "mqtt"
+#define  SUB_ALLARME_KEYNFC_REMOVE "casa/allarme/keynfc/remove"
+#define  SUB_ALLARME_STATO "casa/allarme/stato"
+#define  SUB_ALLARME_CLOCK_SET "casa/allarme/clock/set"
+#define  SUB_ALLARME_CLOCK_GET "casa/allarme/clock/request"
+
+/* DISPlAY LCD */
+//#define pins:
+#define I2C_ADDR    0x27 // LCD address (make sure you run the I2C scanner to verify our LCD address)
+#define Rs_pin  0        // Assign pins between I2C and LCD
+#define Rw_pin  1
+#define En_pin  2
+#define BACKLIGHT_PIN 3
+#define D4_pin  4
+#define D5_pin  5
+#define D6_pin  6
+#define D7_pin  7
+LiquidCrystal_I2C lcd(I2C_ADDR,En_pin,Rw_pin,Rs_pin,D4_pin,D5_pin,D6_pin,D7_pin);
+
+const int ledBlue = 6;
+const int ledWhite = 4;
+
+IPAddress server(192, 168, 43, 175);
+WiFiClient wifiClient;
+PubSubClient client(wifiClient);
+
+// DS1302:  CE pin    -> Arduino Digital 2
+//          I/O pin   -> Arduino Digital 3
+//          SCLK pin  -> Arduino Digital 7
+
+// Init the DS1302
+DS1302 rtc(2, 3, 7);
+// Init a Time-data structure
+Time t;
+String clockProgramming="none";
+
 
 RFID rfid(SS_PIN, RST_PIN);
-
-
 boolean cardmas = 0; // Variabile chiave master
 int slave = 0; // Contatore delle chiavi salvate
+
 
 int sernum0;
 int sernum1;
@@ -62,87 +95,21 @@ enum AlarmStatus {
 AlarmStatus statusAlarm = DISABLED;
 
 
-#include <WiFiNINA.h>
-
-///////please enter your sensitive data in the Secret tab/arduino_secrets.h
-char ssid[] = "SuperFibra2 2.4GHz";        // your network SSID (name)
-char pass[] = "vigorhome";    // your network password (use for WPA, or use as key for WEP)
+char ssid[] = "afg";        // your network SSID (name)
+char pass[] = "paoletto";    // your network password (use for WPA, or use as key for WEP)
 int status = WL_IDLE_STATUS;     // the Wifi radio's status
 
 
-/* MQTT */
-
-#include <PubSubClient.h>
-
-#define ARDUINO_CLIENT_ID "centralina_mc"
-#define CONNECTOR "mqtt"
-
-#define  SUB_ALLARME_KEYNFC_REMOVE "casa/allarme/keynfc/remove"
-#define  SUB_ALLARME_STATO "casa/allarme/stato"
-#define  SUB_ALLARME_CLOCK_SET "casa/allarme/clock/set"
-#define  SUB_ALLARME_CLOCK_GET "casa/allarme/clock/request"
-IPAddress server(192, 168, 2, 196);// MTTQ server IP address
-
-WiFiClient wifiClient;
-PubSubClient client(wifiClient);
-
-
-/* HTTP CLIENT */
-#include <Bridge.h>
-#include <HttpClient.h>
 
 
 
-/* DISPlAY LCD */
-
-// include the library code:
-#include <Wire.h>
-#include <LiquidCrystal_I2C.h>
-
-//#define pins:
-
-#define I2C_ADDR    0x27 // LCD address (make sure you run the I2C scanner to verify our LCD address)
-#define Rs_pin  0        // Assign pins between I2C and LCD
-#define Rw_pin  1
-#define En_pin  2
-#define BACKLIGHT_PIN 3
-#define D4_pin  4
-#define D5_pin  5
-#define D6_pin  6
-#define D7_pin  7
-
-LiquidCrystal_I2C lcd(I2C_ADDR,En_pin,Rw_pin,Rs_pin,D4_pin,D5_pin,D6_pin,D7_pin);
-
-
-
-// DS1302_Serial_Hard (C)2010 Henning Karlsen
-// web: http://www.henningkarlsen.com/electronics
-//
-// A quick demo of how to use my DS1302-library to 
-// retrieve time- and date-date for you to manipulate.
-//
-// I assume you know how to connect the DS1302.
-// DS1302:  CE pin    -> Arduino Digital 2
-//          I/O pin   -> Arduino Digital 3
-//          SCLK pin  -> Arduino Digital 7
-
-#include <DS1302.h>
-
-// Init the DS1302
-DS1302 rtc(2, 3, 7);
-
-// Init a Time-data structure
-Time t;
-String clockProgramming="none";
 
 void initClock(){
   
   // Set the clock to run-mode, and disable the write protection
   rtc.halt(false);
   rtc.writeProtect(false);
-  
 
-  // The following lines can be commented out to use the values already stored in the DS1302
   rtc.setDOW(MONDAY);        // Set Day-of-Week to FRIDAY
   rtc.setTime(16, 10, 0);     // Set the time to 12:00:00 (24hr format)
   rtc.setDate(31, 10, 2019);   // Set the date to August 6th, 2010
@@ -153,7 +120,7 @@ void initClock(){
 
 void updateTime(){
   
-    // Get data from the DS1302
+  // Get data from the DS1302
   t = rtc.getTime();
 
   lcd.setCursor(0,3);
@@ -166,15 +133,12 @@ void updateTime(){
   lcd.print(":");
   lcd.print(t.min);
 
-  
-  // Wait one second before repeating :)
-  delay (1000);
 }
 
 void checkClockProgramming(){
     
     // Get data from the DS1302
-  t = rtc.getTime();
+    t = rtc.getTime();
   
     String timeCurrent = String(t.hour);
     timeCurrent.concat(":");
@@ -192,7 +156,6 @@ void checkClockProgramming(){
         client.publish("casa/allarme/stato","{\"client_id\":\"" ARDUINO_CLIENT_ID  "\",\"data\":\"ACTIVE\"}",2);
 
     }
-      
 }
 
 void initPins() {
@@ -212,28 +175,17 @@ void initPins() {
 
 void setup() {
 
-
-  //Initialize serial and wait for port to open:
   Serial.begin(9600);
-
-
-
+  lcd.print("Inizializ. WiFi");
+  initWifi();  
   initPins();
   initDisplayLCD();
   initClock();
   lcd.clear();
-  lcd.print("Inizializ. WiFi");
-  initWifi();
-
-
-  //rfid init
   SPI.begin();
   rfid.init();
-
   initClientMQTT();
-
-
-    lcd.clear();
+  lcd.clear();
   lcd.print("BENVENUTO");
 
 
@@ -247,10 +199,9 @@ void setup() {
  EEPROM.write(5,0);  */
 
 
-
-
-
 }
+
+
 
 void initDisplayLCD(){
   // set up backlight and turn on module:
@@ -268,6 +219,9 @@ void initDisplayLCD(){
 
 void loop() {
 
+  
+  attemptConnectWifi();
+  
   blinkLed();
   updateTime();
   checkClockProgramming();
@@ -275,12 +229,8 @@ void loop() {
   //verifico lettura rfid
   rfidRead();
 
-    //maintain connection mqtt
-    client.loop();
-
-
-  
-
+  //maintain connection mqtt
+  client.loop();
 
   delay(500);
 
@@ -288,7 +238,6 @@ void loop() {
 
 
 
-/* Event's MQTT client */
 
 void initClientMQTT(){
   
@@ -320,6 +269,7 @@ void initClientMQTT(){
 
 }
 
+/* Event's MQTT client */
 
  void callback(char* topic, byte* payload, unsigned int length) {
  
@@ -453,10 +403,8 @@ void initClientMQTT(){
        j=j+4;
           
     }
-
-     
-  
  }
+
 
 
 void blinkLed(){
@@ -497,12 +445,6 @@ void rfidRead() {
       sernum4 = rfid.serNum[4];
 
       Serial.println("LETTURA SERIAL NFC");
-     /* lcd.clear();
-      lcd.print(sernum0);
-      lcd.print(sernum1);
-      lcd.print(sernum2);
-      lcd.print(sernum3);
-      lcd.print(sernum4); */
       // Se il seriale letto corrisponde con il seriale Master
       // attiva o disattiva la modalita Memorizzazione chiavi
       // e in più visualizza l'elenco della chiavi salvate...
@@ -607,12 +549,7 @@ void initWifi() {
     Serial.println("Please upgrade the firmware");
   }
 
-  // attempt to connect to Wifi network:
-  while (status != WL_CONNECTED) {
-        // Connect to WPA/WPA2 network:
-    status = WiFi.begin(ssid, pass);
-    delay(1000);
-  }
+  attemptConnectWifi();
 
   // you're connected now, so print out the data:
   Serial.println("You're connected to the network");
@@ -623,8 +560,19 @@ void initWifi() {
 }
 
 
+void attemptConnectWifi(){
+  
+    // attempt to connect to Wifi network:
+  while (status != WL_CONNECTED) {
+        // Connect to WPA/WPA2 network:
+    status = WiFi.begin(ssid, pass);
+    delay(1000);
+  }
 
-/* WiFi */
+}
+
+
+
 void printWifiData() {
   // print your board's IP address:
   IPAddress ip = WiFi.localIP();
@@ -676,15 +624,12 @@ void printMacAddress(byte mac[]) {
 }
 
 void storeNfcKey(String nfcKey) {
-  // Initialize the client library
   WiFiClient client;
-
-  // if you get a connection, report back via serial:
   if (client.connect(server, 80)) {
     Serial.println("connected");
     // Make a HTTP request:
     client.print(String("GET /AlarmIoT_WebServer/public/api/user/registration?nfc_key=" + nfcKey) + " HTTP/1.1\r\n" +
-                 "Host: " + "192.168.0.107" + "\r\n" +
+                 "Host: " + "192.168.43.175" + "\r\n" +
                  "Connection: close\r\n" +
                  "\r\n" +
                  "Accept: application/json"
@@ -700,7 +645,6 @@ void storeNfcKey(String nfcKey) {
         Serial.println(line);
       }
     }
-
 
     client.stop();
     Serial.println("\n[Disconnected]");

@@ -3,8 +3,8 @@
 
 #include <WiFiNINA.h>
 ///////please enter your sensitive data in the Secret tab/arduino_secrets.h
-char ssid[] = "SuperFibra2 2.4GHz";        // your network SSID (name)
-char pass[] = "vigorhome";    // your network password (use for WPA, or use as key for WEP)
+char ssid[] = "afg";        // your network SSID (name)
+char pass[] = "paoletto";    // your network password (use for WPA, or use as key for WEP)
 int status = WL_IDLE_STATUS;     // the Wifi radio's status
 
 
@@ -34,7 +34,8 @@ DHT dht(DHTPIN, DHTTYPE); //// Initialize DHT sensor for normal 16mhz Arduino
 
 #define SENSOR1_ID "sensor1"
 #define CONNECTOR "mqtt"
-IPAddress server(192,168,0,103);// MTTQ server IP address
+IPAddress server(192,168,43,175);// MTTQ server IP address
+
 
 WiFiClient wifiClient;
 PubSubClient client(wifiClient);
@@ -49,17 +50,19 @@ StatusSensor statusSensor;
 
 void setup() {
 
+
   statusSensor = ENABLED;
   // put your setup code here, to run once:
 
     //Initialize serial and wait for port to open:
   Serial.begin(9600);
+  initWifi();
+  initClientMQTT();
   initSensorProximity();
   //init temperature's sensor
   dht.begin();
-  initWifi();
-  initClientMQTT();
-  
+
+
 
 
 }
@@ -67,10 +70,8 @@ void setup() {
 void loop() {
   // put your main code here, to run repeatedly:
 
-
+  attemptConnectWifi();
   client.loop();
-
-  
   if(statusSensor == DISABLED)
     return;
 
@@ -143,7 +144,6 @@ void checkDistanceProximity(float temperature) {
 
   if (distance < 10) {
     Serial.println("INTRUSIONE");
-
     //l'allarme ha rilevato l'intrusione. Imposto lo stato corrente
      client.publish("casa/allarme/stato","{\"client_id\":\"sensor1\",\"data\":\"StatusAlarm.ALARMED\"}",2);
   }
@@ -202,7 +202,7 @@ void initWifi() {
 
   // check for the WiFi module:
   if (WiFi.status() == WL_NO_MODULE) {
-    //Serial.println("Communication with WiFi module failed!");
+    Serial.println("Communication with WiFi module failed!");
     // don't continue
     while (true);
   }
@@ -212,18 +212,20 @@ void initWifi() {
     //Serial.println("Please upgrade the firmware");
   }
 
-  // attempt to connect to Wifi network:
+  attemptConnectWifi();
+  Serial.println("You're connected to the network");
+
+
+}
+
+void attemptConnectWifi(){
+  
+    // attempt to connect to Wifi network:
   while (status != WL_CONNECTED) {
         // Connect to WPA/WPA2 network:
     status = WiFi.begin(ssid, pass);
     delay(1000);
   }
-
-  // you're connected now, so print out the data:
-  //Serial.println("You're connected to the network");
-  //printCurrentNet();
-  //printWifiData();
-
 
 }
 
