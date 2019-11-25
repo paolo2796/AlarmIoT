@@ -5,7 +5,6 @@
 ///////please enter your sensitive data in the Secret tab/arduino_secrets.h
 char ssid[] = "afg";        // your network SSID (name)
 char pass[] = "paoletto";    // your network password (use for WPA, or use as key for WEP)
-int status = WL_IDLE_STATUS;     // the Wifi radio's status
 
 
 const int triggerPort = 2;
@@ -33,6 +32,8 @@ DHT dht(DHTPIN, DHTTYPE); //// Initialize DHT sensor for normal 16mhz Arduino
 #include <PubSubClient.h>
 
 #define SENSOR1_ID "sensor1"
+#define USER_BROKER "paolo"
+#define PASS_BROKER "paoletto"
 #define CONNECTOR "mqtt"
 IPAddress server(192,168,43,175);// MTTQ server IP address
 
@@ -70,7 +71,8 @@ void setup() {
 void loop() {
   // put your main code here, to run repeatedly:
 
-  attemptConnectWifi();
+  checkConnectWifi();
+  checkConnectMqtt();
   client.loop();
   if(statusSensor == DISABLED)
     return;
@@ -103,12 +105,11 @@ void initClientMQTT(){
    while (!client.connected()) {
     Serial.println("Connecting to MQTT...");
  
-    if (client.connect(SENSOR1_ID,"paolo", "paoletto")) {
+    if (client.connect(SENSOR1_ID,USER_BROKER, PASS_BROKER)) {
  
       Serial.println("connected");  
       client.subscribe("casa/sensori/request");
       client.subscribe("casa/sensori/" SENSOR1_ID);
-
 
  
     } else {
@@ -183,8 +184,6 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
     else if(strcmp(topic,"casa/sensori/" SENSOR1_ID)==0){
 
-      Serial.println("AFAMMOK");
-
           if(message.equals("disabled"))
               statusSensor = DISABLED;
           else if(message.equals("enabled")){
@@ -212,21 +211,48 @@ void initWifi() {
     //Serial.println("Please upgrade the firmware");
   }
 
-  attemptConnectWifi();
+  checkConnectWifi();
   Serial.println("You're connected to the network");
 
 
 }
 
-void attemptConnectWifi(){
-  
+void checkConnectWifi(){
+
     // attempt to connect to Wifi network:
-  while (status != WL_CONNECTED) {
-        // Connect to WPA/WPA2 network:
-    status = WiFi.begin(ssid, pass);
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.println("TENTATIVO DI CONNESSIONE ALLA RETE WIFI");
+    // Connect to WPA/WPA2 network:
+    WiFi.begin(ssid, pass);
     delay(1000);
   }
 
+}
+
+void checkConnectMqtt(){
+
+
+   while (!client.connected()) {
+    Serial.println("Connecting to MQTT...");
+ 
+    if (client.connect(SENSOR1_ID,USER_BROKER, PASS_BROKER)) {
+ 
+      Serial.println("connected");  
+      client.subscribe("casa/sensori/request");
+      client.subscribe("casa/sensori/" SENSOR1_ID);
+
+ 
+    } else {
+ 
+      Serial.print("failed with state ");
+      Serial.print(client.state());
+      delay(500);
+ 
+    }
+  }
+
+
+  
 }
 
 

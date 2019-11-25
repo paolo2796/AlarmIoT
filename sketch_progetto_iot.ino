@@ -97,7 +97,6 @@ AlarmStatus statusAlarm = DISABLED;
 
 char ssid[] = "afg";        // your network SSID (name)
 char pass[] = "paoletto";    // your network password (use for WPA, or use as key for WEP)
-int status = WL_IDLE_STATUS;     // the Wifi radio's status
 
 
 
@@ -110,9 +109,8 @@ void initClock(){
   rtc.halt(false);
   rtc.writeProtect(false);
 
-  rtc.setDOW(MONDAY);        // Set Day-of-Week to FRIDAY
-  rtc.setTime(16, 10, 0);     // Set the time to 12:00:00 (24hr format)
-  rtc.setDate(31, 10, 2019);   // Set the date to August 6th, 2010
+  rtc.setTime(11, 30, 0);     // Set the time to 12:00:00 (24hr format)
+  rtc.setDate(2, 12, 2019);   // Set the date to August 6th, 2010
    
 
 }
@@ -175,11 +173,11 @@ void initPins() {
 
 void setup() {
 
-  Serial.begin(9600);
+  //Serial.begin(9600);
+  initDisplayLCD();
   lcd.print("Inizializ. WiFi");
   initWifi();  
   initPins();
-  initDisplayLCD();
   initClock();
   lcd.clear();
   SPI.begin();
@@ -189,14 +187,14 @@ void setup() {
   lcd.print("BENVENUTO");
 
 
-/*
+
 
  EEPROM.write(0,0);
  EEPROM.write(1,0);
  EEPROM.write(2,0);
  EEPROM.write(3,0);
  EEPROM.write(4,0);
- EEPROM.write(5,0);  */
+ EEPROM.write(5,0);  
 
 
 }
@@ -210,7 +208,6 @@ void initDisplayLCD(){
   // set up the LCD's number of columns and rows:
   lcd.begin(20, 4); //My LCD is 20x4
   lcd.setCursor(5,1);
-  lcd.print("LOADING...");
   
 }
 
@@ -220,7 +217,8 @@ void initDisplayLCD(){
 void loop() {
 
   
-  attemptConnectWifi();
+  checkConnectWifi();
+  checkConnectMqtt();
   
   blinkLed();
   updateTime();
@@ -247,11 +245,11 @@ void initClientMQTT(){
 
 
      while (!client.connected()) {
-          Serial.println("Connecting to MQTT...");
+          //Serial.println("Connecting to MQTT...");
        
           if (client.connect(ARDUINO_CLIENT_ID,"paolo", "paoletto")) {
        
-            Serial.println("connected");  
+            //Serial.println("connected");  
            // Subscribe
            client.subscribe(SUB_ALLARME_STATO);
            client.subscribe(SUB_ALLARME_KEYNFC_REMOVE);
@@ -260,8 +258,8 @@ void initClientMQTT(){
 
           } else {
        
-            Serial.print("failed with state ");
-            Serial.print(client.state());
+            //Serial.print("failed with state ");
+            //Serial.print(client.state());
             delay(500);
        
           }
@@ -273,25 +271,25 @@ void initClientMQTT(){
 
  void callback(char* topic, byte* payload, unsigned int length) {
  
-    Serial.print("Message arrived in topic: ");
-    Serial.println(topic);
+    //Serial.print("Message arrived in topic: ");
+    //Serial.println(topic);
    
-    Serial.println("Message:");
+    //Serial.println("Message:");
     String message = "";
     for (int i = 0; i < length; i++) {
       message = message + (char)payload[i];
     }
   
    
-    Serial.println(message);
-    Serial.println("-----------------------");
+    //Serial.println(message);
+    //Serial.println("-----------------------");
     if(strcmp(topic,SUB_ALLARME_STATO)==0){
           StaticJsonDocument<200> doc;
          DeserializationError error = deserializeJson(doc, message);
           // Test if parsing succeeds.
           if (error) {
-            Serial.print(F("deserializeJson() failed: "));
-            Serial.println(error.c_str());
+            //Serial.print(F("deserializeJson() failed: "));
+            //Serial.println(error.c_str());
             return;
          }
 
@@ -303,13 +301,13 @@ void initClientMQTT(){
           String  data = doc["data"];
 
         if(data.equals("StatusAlarm.ACTIVE")){
-          Serial.println("ACTIVE");
+          //Serial.println("ACTIVE");
            statusAlarm =ACTIVE;
            lcd.clear();
            lcd.print("ALLARME ATTIVO");
         }
         else if(data.equals("StatusAlarm.ALARMED")){
-          Serial.println("ALARMED");
+          //Serial.println("ALARMED");
               if(statusAlarm==DISABLED)
                 return;
               statusAlarm =ALARMED;
@@ -319,7 +317,7 @@ void initClientMQTT(){
          }
 
         else if(data.equals("StatusAlarm.DISABLED")){
-          Serial.println("DISABLED");
+          //Serial.println("DISABLED");
               statusAlarm=DISABLED;
               lcd.clear();
               lcd.print("ALLARMED DISATTIVATO");
@@ -366,12 +364,12 @@ void initClientMQTT(){
           String EEPROMReadTemp2 = EEPROMReadTemp1 + EEPROMRead3;
           String EEPROMRead = EEPROMReadTemp2 + EEPROMRead4;
 
-          Serial.println(keynfc);
-          Serial.println("-");
-          Serial.println(EEPROMRead);
+          //Serial.println(keynfc);
+          //Serial.println("-");
+          //Serial.println(EEPROMRead);
 
             if(keynfc.equals(EEPROMRead)){
-                Serial.println("CHIAVE SLAVE VALIDA");
+                //Serial.println("CHIAVE SLAVE VALIDA");
                 EEPROM.write(j,0);
                 EEPROM.write(j+1,0);
                 EEPROM.write(j+2,0);
@@ -444,7 +442,7 @@ void rfidRead() {
       sernum3 = rfid.serNum[3];
       sernum4 = rfid.serNum[4];
 
-      Serial.println("LETTURA SERIAL NFC");
+      //Serial.println("LETTURA SERIAL NFC");
       // Se il seriale letto corrisponde con il seriale Master
       // attiva o disattiva la modalita Memorizzazione chiavi
       // e in più visualizza l'elenco della chiavi salvate...
@@ -487,7 +485,7 @@ void rfidRead() {
       // e se è attiva la modalita Memorizzazione chiavi, salva il seriale in memoria come slave
       else if (cardmas == 1 ){
         int nextSlavePosition = (EEPROM.read(0)*5) +1;
-        Serial.println(nextSlavePosition +1);
+        //Serial.println(nextSlavePosition +1);
         EEPROM.write(0, EEPROM.read(0) + 1);
         EEPROM.write(nextSlavePosition, sernum0);
         EEPROM.write(nextSlavePosition + 1, sernum1);
@@ -495,11 +493,13 @@ void rfidRead() {
         EEPROM.write(nextSlavePosition + 3, sernum3);
         EEPROM.write(nextSlavePosition + 4, sernum4);
         lcd.clear();
-        lcd.print("REGISTRAZIONE IN CORSO");
-        Serial.println(nextSlavePosition);
-        storeNfcKey(String(sernum0,DEC) + String(sernum1,DEC) + String(sernum2,DEC) + String(sernum3,DEC) + String(sernum4,DEC));
         lcd.setCursor(0,0);
-        lcd.print("                   ");
+        lcd.print("REGISTRATO CON SUCCESSO");
+        delay(2000);
+        //Serial.println(nextSlavePosition);
+        //storeNfcKey(String(sernum0,DEC) + String(sernum1,DEC) + String(sernum2,DEC) + String(sernum3,DEC) + String(sernum4,DEC));
+        lcd.setCursor(0,0);
+        lcd.print("                                ");
        
       }
     }
@@ -539,94 +539,121 @@ void initWifi() {
   if (WiFi.status() == WL_NO_MODULE) {
     lcd.clear();
     lcd.print("Comunicazione wifi fallita");
-    Serial.println("Communication with WiFi module failed!");
+    //Serial.println("Communication with WiFi module failed!");
     // don't continue
     while (true);
   }
 
   String fv = WiFi.firmwareVersion();
   if (fv < WIFI_FIRMWARE_LATEST_VERSION) {
-    Serial.println("Please upgrade the firmware");
+    //Serial.println("Please upgrade the firmware");
   }
 
-  attemptConnectWifi();
+  checkConnectWifi();
 
   // you're connected now, so print out the data:
-  Serial.println("You're connected to the network");
+  //Serial.println("You're connected to the network");
   //printCurrentNet();
   //printWifiData();
 
 
 }
 
-
-void attemptConnectWifi(){
+void checkConnectMqtt(){
   
+
+     while (!client.connected()) {
+          //Serial.println("Connecting to MQTT...");
+       
+          if (client.connect(ARDUINO_CLIENT_ID,"paolo", "paoletto")) {
+       
+            //Serial.println("connected");  
+           // Subscribe
+           client.subscribe(SUB_ALLARME_STATO);
+           client.subscribe(SUB_ALLARME_KEYNFC_REMOVE);
+           client.subscribe(SUB_ALLARME_CLOCK_GET);
+           client.subscribe(SUB_ALLARME_CLOCK_SET);
+
+          } else {
+       
+            //Serial.print("failed with state ");
+            //Serial.print(client.state());
+            delay(500);
+       
+          }
+      }  
+  
+}
+
+
+
+void checkConnectWifi(){
+
     // attempt to connect to Wifi network:
-  while (status != WL_CONNECTED) {
-        // Connect to WPA/WPA2 network:
-    status = WiFi.begin(ssid, pass);
+  while (WiFi.status() != WL_CONNECTED) {
+    //Serial.println("TENTATIVO DI CONNESSIONE ALLA RETE WIFI");
+    // Connect to WPA/WPA2 network:
+    WiFi.begin(ssid, pass);
     delay(1000);
   }
 
 }
 
 
-
 void printWifiData() {
   // print your board's IP address:
   IPAddress ip = WiFi.localIP();
-  Serial.println("IP Address: ");
-  Serial.println(ip);
-  Serial.println(ip);
+  //Serial.println("IP Address: ");
+  //Serial.println(ip);
+  //Serial.println(ip);
 
   // print your MAC address:
   byte mac[6];
   WiFi.macAddress(mac);
-  Serial.println("MAC address: ");
+  //Serial.println("MAC address: ");
   //printMacAddress(mac);
 }
 
 void printCurrentNet() {
   // print the SSID of the network you're attached to:
-  Serial.println("SSID: ");
-  Serial.println(WiFi.SSID());
+  //Serial.println("SSID: ");
+  //Serial.println(WiFi.SSID());
 
   // print the MAC address of the router you're attached to:
   byte bssid[6];
   WiFi.BSSID(bssid);
-  Serial.println("BSSID: ");
+  //Serial.println("BSSID: ");
   printMacAddress(bssid);
 
   // print the received signal strength:
   long rssi = WiFi.RSSI();
-  Serial.println("signal strength (RSSI):");
-  Serial.println(rssi);
+  //Serial.println("signal strength (RSSI):");
+  //Serial.println(rssi);
 
   // print the encryption type:
   byte encryption = WiFi.encryptionType();
-  Serial.println("Encryption Type:");
-  Serial.println(encryption, HEX);
-  Serial.println();
+  //Serial.println("Encryption Type:");
+  //Serial.println(encryption, HEX);
+  //Serial.println();
 }
 
 void printMacAddress(byte mac[]) {
   for (int i = 5; i >= 0; i--) {
     if (mac[i] < 16) {
-      Serial.println("0");
+      //Serial.println("0");
     }
-    Serial.println(mac[i], HEX);
+    //Serial.println(mac[i], HEX);
     if (i > 0) {
-      Serial.println(":");
+      //Serial.println(":");
     }
   }
-  Serial.println();
+  //Serial.println();
 }
 
 void storeNfcKey(String nfcKey) {
   WiFiClient client;
   if (client.connect(server, 80)) {
-    Serial.println("connected");
+    //Serial.println("connected");
     // Make a HTTP request:
     client.print(String("GET /AlarmIoT_WebServer/public/api/user/registration?nfc_key=" + nfcKey) + " HTTP/1.1\r\n" +
                  "Host: " + "192.168.43.175" + "\r\n" +
@@ -635,19 +662,19 @@ void storeNfcKey(String nfcKey) {
                  "Accept: application/json"
                 );
     client.println();
-    Serial.println("[Response:]");
+    //Serial.println("[Response:]");
     String line;
     while (client.connected() || client.available())
     {
       if (client.available())
       {
         line = client.readStringUntil('\r');
-        Serial.println(line);
+        //Serial.println(line);
       }
     }
 
     client.stop();
-    Serial.println("\n[Disconnected]");
+    //Serial.println("\n[Disconnected]");
   }
 }
 
